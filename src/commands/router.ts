@@ -1,4 +1,10 @@
+/**
+ * Command Router - Dispatches slash commands to handlers
+ *
+ * Checks admin permission for admin commands, then routes to the right handler.
+ */
 import type { ChatInputCommandInteraction } from "discord.js";
+import { canRunAdminCommand } from "../services/PermissionService.js";
 import { handleSetup } from "./admin/setup.js";
 import { handleConfigView } from "./admin/config-view.js";
 import { handleConfigSet } from "./admin/config-set.js";
@@ -6,26 +12,32 @@ import { handleSetLogChannel } from "./admin/setlogchannel.js";
 import { handleEnable } from "./admin/enable.js";
 import { handleDisable } from "./admin/disable.js";
 import { handleRepair } from "./admin/repair.js";
+import { handleReset } from "./admin/reset.js";
 import { handleVc } from "./user/vc.js";
+
+const ADMIN_COMMANDS = [
+  "setup",
+  "config",
+  "setlogchannel",
+  "enable",
+  "disable",
+  "repair",
+  "reset",
+] as const;
 
 export async function handleCommand(
   interaction: ChatInputCommandInteraction
 ): Promise<void> {
   const name = interaction.commandName;
 
-  const adminCommands = [
-    "setup",
-    "config",
-    "setlogchannel",
-    "enable",
-    "disable",
-    "repair",
-  ];
-
-  if (adminCommands.includes(name) || (name === "config" && interaction.options.getSubcommand(false))) {
-    const perms = interaction.memberPermissions;
-    if (!perms?.has("ManageGuild")) {
-      await interaction.reply({ content: "You need the Manage Server permission.", ephemeral: true });
+  if (ADMIN_COMMANDS.includes(name as (typeof ADMIN_COMMANDS)[number])) {
+    const guild = interaction.guild;
+    const userId = interaction.user.id;
+    if (!canRunAdminCommand(guild, userId)) {
+      await interaction.reply({
+        content: "Only the server owner or a bot owner can use admin commands.",
+        ephemeral: true,
+      });
       return;
     }
   }
@@ -52,6 +64,9 @@ export async function handleCommand(
       break;
     case "repair":
       await handleRepair(interaction);
+      break;
+    case "reset":
+      await handleReset(interaction);
       break;
     case "vc":
       await handleVc(interaction);

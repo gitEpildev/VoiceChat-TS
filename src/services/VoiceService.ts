@@ -1,3 +1,9 @@
+/**
+ * Voice Service - Core Logic for User Voice Rooms
+ *
+ * Creates voice + text channel pairs, checks permissions, moves users,
+ * manages side chat access, and handles channel lifecycle.
+ */
 import {
   type Guild,
   type GuildMember,
@@ -6,6 +12,7 @@ import {
   ChannelType,
   PermissionFlagsBits,
 } from "discord.js";
+import { postControlPanel } from "./ControlPanelService.js";
 import { query, queryOne, queryAll } from "../db/postgres.js";
 import type { GuildConfig } from "../db/postgres.js";
 import { applyNameTemplate } from "../utils/template.js";
@@ -35,6 +42,15 @@ export async function getVoiceChannel(
   );
 }
 
+export async function getVoiceChannelByTextChannelId(
+  textChannelId: string
+): Promise<VoiceChannelRow | null> {
+  return queryOne<VoiceChannelRow>(
+    `SELECT * FROM voice_channels WHERE "textChannelId" = $1`,
+    [textChannelId]
+  );
+}
+
 export async function getChannelsByOwner(
   guildId: string,
   ownerId: string
@@ -44,6 +60,40 @@ export async function getChannelsByOwner(
     [guildId, ownerId]
   );
   return result ? parseInt(result.count, 10) : 0;
+}
+
+export async function cleanupOrphanedChannels(
+  guild: Guild,
+  config: GuildConfig
+): Promise<number> {
+  if (!config.categoryId) return 0;
+  const category = await guild.channels.fetch(config.categoryId).catch(() => null);
+  if (!category || category.type !== ChannelType.GuildCategory) return 0;
+
+  const rows = await queryAll<{ voiceChannelId: string; textChannelId: string }>(
+    `SELECT "voiceChannelId", "textChannelId" FROM voice_channels WHERE "guildId" = $1`,
+    [guild.id]
+  );
+  const knownIds = new Set<string>();
+  for (const r of rows) {
+    knownIds.add(r.voiceChannelId);
+    knownIds.add(r.textChannelId);
+  }
+  knownIds.add(config.creatorChannelId ?? "");
+  knownIds.add(config.controlPanelChannelId ?? "");
+
+  const children = guild.channels.cache.filter((c) => c.parentId === config.categoryId);
+  let cleaned = 0;
+  for (const [, ch] of children) {
+    if (knownIds.has(ch.id)) continue;
+    try {
+      await ch.delete();
+      cleaned++;
+    } catch {
+      /* ignore */
+    }
+  }
+  return cleaned;
 }
 
 export async function canCreateChannel(
@@ -96,7 +146,7 @@ export async function createVoiceChannel(
     member.user.username
   ).slice(0, 100);
   const voiceName = name;
-  const textName = `💬︱${member.user.username}-chat`.slice(0, 100);
+  const textName = `💬 ${member.user.username}`.slice(0, 100);
 
   const voiceChannel = await channels.create({
     name: voiceName,
@@ -145,6 +195,22 @@ export async function createVoiceChannel(
      ON CONFLICT ("guildId", "userId") DO UPDATE SET "lastCreatedAt" = $3`,
     [guild.id, member.id, now]
   );
+
+  // Move user into the new room BEFORE posting control panel (so move succeeds even if panel fails)
+  try {
+    await guild.members.edit(member.id, {
+      channel: voiceChannel.id,
+      reason: "Auto-move to new voice room",
+    });
+  } catch (e) {
+    console.error("Failed to move user to new VC:", e);
+  }
+
+  try {
+    await postControlPanel(textChannel, { ...config, guildId: guild.id });
+  } catch (e) {
+    console.error("Failed to post control panel (room still created):", e);
+  }
 
   return { voiceChannel, textChannel };
 }

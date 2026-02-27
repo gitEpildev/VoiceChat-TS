@@ -1,3 +1,4 @@
+/** Validate channel rename (1-100 chars, non-empty). */
 export function validateRename(name: string): { valid: boolean; error?: string } {
   const trimmed = name.trim();
   if (trimmed.length === 0) {
@@ -9,6 +10,7 @@ export function validateRename(name: string): { valid: boolean; error?: string }
   return { valid: true };
 }
 
+/** Validate user limit (0-99; 0 = unlimited). */
 export function validateLimit(value: number): { valid: boolean; error?: string } {
   if (!Number.isInteger(value) || value < 0 || value > 99) {
     return { valid: false, error: "Limit must be 0–99." };

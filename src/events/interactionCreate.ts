@@ -1,3 +1,11 @@
+/**
+ * Interaction Create Event - Slash Commands, Buttons, Modals, Select Menus
+ *
+ * - Slash commands -> router -> admin/user handlers
+ * - Control panel buttons (Rename, Lock, etc.) -> resolveVoiceContext, then action
+ * - UserSelectMenu (Transfer, Kick, Ban, Unban) -> process selection
+ * - Modal submit (Rename, Limit) -> apply change
+ */
 import type {
   Client,
   ButtonInteraction,
@@ -7,10 +15,15 @@ import type {
   VoiceChannel,
   TextChannel,
 } from "discord.js";
-import { PermissionFlagsBits } from "discord.js";
+import {
+  ActionRowBuilder,
+  UserSelectMenuBuilder,
+  PermissionFlagsBits,
+} from "discord.js";
 import { getConfig } from "../services/ConfigService.js";
 import {
   getVoiceChannel,
+  getVoiceChannelByTextChannelId,
   updateOwner,
   updateLastOwnerSeen,
   syncSideChatPermissions,
@@ -41,6 +54,7 @@ const CUSTOM_IDS = [
   "vc:kick",
   "vc:ban",
   "vc:unban",
+  "vc:unban:btn",
 ] as const;
 
 function isControlPanelCustomId(id: string): id is (typeof CUSTOM_IDS)[number] {
@@ -62,26 +76,33 @@ async function resolveVoiceContext(interaction: ButtonInteraction | UserSelectMe
 } | null> {
   if (!interaction.guild || !interaction.member) return null;
   const member = interaction.member as GuildMember;
-  const voiceChannel = await getMemberVoiceChannel(member);
-  if (!voiceChannel) {
-    await interaction.reply({
-      content: "You must be in a voice channel to use the control panel.",
-      ephemeral: true,
-    });
-    return null;
-  }
-  const vc = await getVoiceChannel(voiceChannel.id);
-  if (!vc) {
-    await interaction.reply({
-      content: "This voice channel is not managed by the bot.",
-      ephemeral: true,
-    });
-    return null;
-  }
   const config = await getConfig(interaction.guildId!);
-  if (!config || !config.controlPanelChannelId || interaction.channelId !== config.controlPanelChannelId) {
+  if (!config) return null;
+
+  let voiceChannel: VoiceChannel | null = await getMemberVoiceChannel(member);
+  let vc = voiceChannel ? await getVoiceChannel(voiceChannel.id) : null;
+
+  const vcByText = await getVoiceChannelByTextChannelId(interaction.channelId ?? "");
+  if (!vc && vcByText && member.voice.channelId === vcByText.voiceChannelId) {
+    const ch = await interaction.guild.channels.fetch(vcByText.voiceChannelId);
+    voiceChannel = ch?.isVoiceBased() ? (ch as VoiceChannel) : null;
+    vc = vcByText;
+  }
+
+  if (!voiceChannel || !vc) {
+    if (!interaction.replied) {
+      await interaction.reply({
+        content: "You must be in your voice channel to use these controls.",
+        ephemeral: true,
+      }).catch(() => {});
+    }
     return null;
   }
+
+  const inSideChat = vcByText?.textChannelId === interaction.channelId;
+  const inControlPanel = config.controlPanelChannelId && interaction.channelId === config.controlPanelChannelId;
+  if (!inSideChat && !inControlPanel) return null;
+
   return { voiceChannel, vc, config };
 }
 
@@ -136,7 +157,7 @@ export function registerInteractionCreate(client: Client): void {
               return;
             }
             await setOwnerPermissions(voiceChannel, vc.ownerId, true);
-            await interaction.reply({ content: "Channel locked.", ephemeral: true });
+            await interaction.reply({ content: "🔒 Channel locked.", ephemeral: true });
             await log(client, interaction.guildId!, "lock", {
               userId: member.id,
               userName: member.user.username,
@@ -151,7 +172,7 @@ export function registerInteractionCreate(client: Client): void {
               return;
             }
             await setOwnerPermissions(voiceChannel, vc.ownerId, false);
-            await interaction.reply({ content: "Channel unlocked.", ephemeral: true });
+            await interaction.reply({ content: "🔓 Channel unlocked.", ephemeral: true });
             await log(client, interaction.guildId!, "unlock", {
               userId: member.id,
               userName: member.user.username,
@@ -166,7 +187,7 @@ export function registerInteractionCreate(client: Client): void {
               return;
             }
             await voiceChannel.permissionOverwrites.edit(interaction.guild!.id, { Connect: true });
-            await interaction.reply({ content: "Channel is now public.", ephemeral: true });
+            await interaction.reply({ content: "🌐 Channel is now public.", ephemeral: true });
             await log(client, interaction.guildId!, "privacy_change", {
               userId: member.id,
               userName: member.user.username,
@@ -176,13 +197,33 @@ export function registerInteractionCreate(client: Client): void {
             });
             return;
 
+          case "vc:unban:btn":
+            if (!isOwner) {
+              await interaction.reply({ content: "Only the owner can unban.", ephemeral: true });
+              return;
+            }
+            await interaction.reply({
+              content: "Select a user to unban:",
+              ephemeral: true,
+              components: [
+                new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+                  new UserSelectMenuBuilder()
+                    .setCustomId("vc:unban")
+                    .setPlaceholder("✅ Unban user…")
+                    .setMinValues(1)
+                    .setMaxValues(1)
+                ),
+              ],
+            });
+            return;
+
           case "vc:private":
             if (!isOwner) {
               await interaction.reply({ content: "Only the channel owner can change privacy.", ephemeral: true });
               return;
             }
             await voiceChannel.permissionOverwrites.edit(interaction.guild!.id, { Connect: false });
-            await interaction.reply({ content: "Channel is now private.", ephemeral: true });
+            await interaction.reply({ content: "🔐 Channel is now private.", ephemeral: true });
             await log(client, interaction.guildId!, "privacy_change", {
               userId: member.id,
               userName: member.user.username,
@@ -207,7 +248,7 @@ export function registerInteractionCreate(client: Client): void {
               await syncSideChatPermissions(voiceChannel, textChannel, member.id);
             }
             await interaction.reply({
-              content: `You are now the owner of this channel.`,
+              content: "👑 You are now the owner of this channel.",
               ephemeral: true,
             });
             await log(client, interaction.guildId!, "claim_executed", {
@@ -244,7 +285,7 @@ export function registerInteractionCreate(client: Client): void {
           }
           const voiceChannel = await client.channels.fetch(member.voice.channelId) as VoiceChannel;
           await voiceChannel.setName(name.trim().slice(0, 100));
-          await interaction.reply({ content: "Channel renamed.", ephemeral: true });
+          await interaction.reply({ content: "✏️ Channel renamed.", ephemeral: true });
           return;
         }
 
@@ -270,7 +311,7 @@ export function registerInteractionCreate(client: Client): void {
             return;
           }
           await (voiceChannel as VoiceChannel).setUserLimit(num);
-          await interaction.reply({ content: `User limit set to ${num}.`, ephemeral: true });
+          await interaction.reply({ content: `👥 User limit set to ${num}.`, ephemeral: true });
           return;
         }
         return;
@@ -316,7 +357,7 @@ export function registerInteractionCreate(client: Client): void {
             await setOwnerPermissions(voiceChannel, targetUser.id, false);
             if (textCh) await syncSideChatPermissions(voiceChannel, textCh, targetUser.id);
             await interaction.reply({
-              content: `Ownership transferred to ${targetUser}.`,
+              content: `↗️ Ownership transferred to ${targetUser}.`,
               ephemeral: true,
             });
             await log(client, interaction.guildId!, "owner_transferred", {
@@ -337,7 +378,7 @@ export function registerInteractionCreate(client: Client): void {
             const kickTarget = voiceChannel.members.get(targetUser.id);
             if (kickTarget) {
               await kickTarget.voice.disconnect();
-              await interaction.reply({ content: `${targetUser} has been kicked.`, ephemeral: true });
+              await interaction.reply({ content: `👢 ${targetUser} has been kicked.`, ephemeral: true });
               await log(client, interaction.guildId!, "kick", {
                 userId: member.id,
                 userName: member.user.username,
@@ -359,7 +400,7 @@ export function registerInteractionCreate(client: Client): void {
             const banTarget = voiceChannel.members.get(targetUser.id);
             if (banTarget) await banTarget.voice.disconnect();
             await voiceChannel.permissionOverwrites.create(targetUser.id, { Connect: false });
-            await interaction.reply({ content: `${targetUser} has been banned from this channel.`, ephemeral: true });
+            await interaction.reply({ content: `🚫 ${targetUser} has been banned from this channel.`, ephemeral: true });
             await log(client, interaction.guildId!, "ban", {
               userId: member.id,
               userName: member.user.username,
@@ -376,7 +417,7 @@ export function registerInteractionCreate(client: Client): void {
               return;
             }
             await voiceChannel.permissionOverwrites.delete(targetUser.id);
-            await interaction.reply({ content: `${targetUser} has been unbanned.`, ephemeral: true });
+            await interaction.reply({ content: `✅ ${targetUser} has been unbanned.`, ephemeral: true });
             await log(client, interaction.guildId!, "unban", {
               userId: member.id,
               userName: member.user.username,

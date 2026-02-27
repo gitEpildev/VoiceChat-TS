@@ -1,7 +1,57 @@
+/**
+ * /setup handler - Creates category, Join To Create channel, and control panel.
+ * Tears down existing setup first if present.
+ */
 import type { ChatInputCommandInteraction } from "discord.js";
 import { ChannelType } from "discord.js";
+import { query, queryAll } from "../../db/postgres.js";
 import { getConfig, upsertConfigFull } from "../../services/ConfigService.js";
-import { postControlPanel } from "../../services/ControlPanelService.js";
+import { deleteVoiceChannel } from "../../services/VoiceService.js";
+import { cancelDelete } from "../../utils/timers.js";
+
+async function teardownExistingSetup(
+  guild: import("discord.js").Guild,
+  existing: { categoryId: string | null; creatorChannelId: string | null; controlPanelChannelId: string | null }
+): Promise<void> {
+  const rows = await queryAll<{ voiceChannelId: string; textChannelId: string }>(
+    `SELECT "voiceChannelId", "textChannelId" FROM voice_channels WHERE "guildId" = $1`,
+    [guild.id]
+  );
+
+  for (const row of rows) {
+    cancelDelete(row.voiceChannelId);
+    try {
+      const vc = await guild.channels.fetch(row.voiceChannelId);
+      if (vc) await vc.delete();
+    } catch {
+      /* already deleted */
+    }
+    try {
+      const tc = await guild.channels.fetch(row.textChannelId);
+      if (tc) await tc.delete();
+    } catch {
+      /* already deleted */
+    }
+    await deleteVoiceChannel(guild.id, row.voiceChannelId);
+  }
+
+  await query(`DELETE FROM cooldowns WHERE "guildId" = $1`, [guild.id]);
+
+  const toDelete = [
+    existing.controlPanelChannelId,
+    existing.creatorChannelId,
+    existing.categoryId,
+  ].filter((id): id is string => !!id);
+
+  for (const id of toDelete) {
+    try {
+      const ch = await guild.channels.fetch(id);
+      if (ch) await ch.delete();
+    } catch {
+      /* already deleted */
+    }
+  }
+}
 
 export async function handleSetup(
   interaction: ChatInputCommandInteraction
@@ -12,16 +62,30 @@ export async function handleSetup(
     return;
   }
 
+  await interaction.deferReply({ ephemeral: true });
+
   const existing = await getConfig(guild.id);
   if (existing?.categoryId) {
-    await interaction.reply({
-      content: "Voice channels are already set up. Use /repair to fix issues, or remove the category and run /setup again.",
-      ephemeral: true,
-    });
-    return;
+    try {
+      const categoryExists = await guild.channels.fetch(existing.categoryId).catch(() => null);
+      if (categoryExists) {
+        await teardownExistingSetup(guild, existing);
+      } else {
+        await query(`DELETE FROM voice_channels WHERE "guildId" = $1`, [guild.id]);
+        await query(`DELETE FROM cooldowns WHERE "guildId" = $1`, [guild.id]);
+      }
+      await query(
+        `UPDATE guild_config SET "categoryId" = NULL, "creatorChannelId" = NULL, "controlPanelChannelId" = NULL, "controlPanelMessageId" = NULL WHERE "guildId" = $1`,
+        [guild.id]
+      );
+    } catch (err) {
+      console.error("Teardown error:", err);
+      await interaction.editReply({
+        content: `Failed to remove old setup: ${err instanceof Error ? err.message : "Unknown error"}`,
+      });
+      return;
+    }
   }
-
-  await interaction.deferReply({ ephemeral: true });
 
   try {
     const category = await guild.channels.create({
@@ -35,49 +99,30 @@ export async function handleSetup(
       parent: category.id,
     });
 
-    const controlPanelChannel = await guild.channels.create({
-      name: "🎛︱voice-control",
-      type: ChannelType.GuildText,
-      parent: category.id,
-    });
-
-    const messageId = await postControlPanel(controlPanelChannel, {
-      guildId: guild.id,
-      enabled: 1,
-      categoryId: category.id,
-      creatorChannelId: creatorChannel.id,
-      controlPanelChannelId: controlPanelChannel.id,
-      controlPanelMessageId: null,
-      logChannelId: null,
-      nameTemplate: "{username}'s Room",
-      brandColor: "#5865F2",
-      cooldownSeconds: 60,
-      deleteDelaySeconds: 300,
-      claimTimeoutSeconds: 120,
-      maxChannelsPerUser: 1,
-    });
-
     await upsertConfigFull(guild.id, {
       enabled: 1,
       categoryId: category.id,
       creatorChannelId: creatorChannel.id,
-      controlPanelChannelId: controlPanelChannel.id,
-      controlPanelMessageId: messageId,
-      nameTemplate: "{username}'s Room",
-      brandColor: "#5865F2",
-      cooldownSeconds: 60,
-      deleteDelaySeconds: 300,
-      claimTimeoutSeconds: 120,
-      maxChannelsPerUser: 1,
+      controlPanelChannelId: null,
+      controlPanelMessageId: null,
+      logChannelId: existing?.logChannelId ?? null,
+      nameTemplate: existing?.nameTemplate ?? "{username}'s Room",
+      brandColor: existing?.brandColor ?? "#5865F2",
+      cooldownSeconds: existing?.cooldownSeconds ?? 60,
+      deleteDelaySeconds: existing?.deleteDelaySeconds ?? 10,
+      claimTimeoutSeconds: existing?.claimTimeoutSeconds ?? 120,
+      maxChannelsPerUser: existing?.maxChannelsPerUser ?? 1,
     });
 
+    const logNote = existing?.logChannelId ? "" : "\n\nUse `/setlogchannel` to configure logging.";
     await interaction.editReply({
-      content: `Setup complete!\n• Category: ${category}\n• Creator: ${creatorChannel}\n• Control Panel: ${controlPanelChannel}\n\nUse /setlogchannel to configure logging.`,
+      content: `✅ **Setup complete!** Old setup removed and recreated.\n\n🔊 **Category:** ${category}\n🎤 **Creator channel:** ${creatorChannel}\n\nJoin the creator channel to create your voice room. Each room gets a private chat with controls.${logNote}`,
     });
   } catch (err) {
     console.error("Setup error:", err);
+    const msg = err instanceof Error ? err.message : "Unknown error";
     await interaction.editReply({
-      content: `Setup failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-    });
+      content: `❌ **Setup failed:** ${msg}\n\nIf you see "Missing Permissions", re-invite the bot with Administrator.`,
+    }).catch(() => {});
   }
 }

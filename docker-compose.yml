@@ -2,6 +2,8 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    ports:
+      - "5432:5432"
     environment:
       POSTGRES_USER: voicebot
       POSTGRES_PASSWORD: voicebot
@@ -21,6 +23,7 @@ services:
       BOT_TOKEN: ${BOT_TOKEN}
       CLIENT_ID: ${CLIENT_ID}
       DATABASE_URL: postgresql://voicebot:voicebot@postgres:5432/voicebot
+      BOT_OWNER: ${BOT_OWNER}
     depends_on:
       postgres:
         condition: service_healthy

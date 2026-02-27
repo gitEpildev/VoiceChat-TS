@@ -1,3 +1,9 @@
+/**
+ * Logging Service - Send Event Logs to a Guild's Log Channel
+ *
+ * When logChannelId is set (via /setlogchannel), events like channel_created,
+ * kick, ban, lock, etc. are sent as embeds to that channel.
+ */
 import {
   type Client,
   type TextChannel,

@@ -1,3 +1,10 @@
+/**
+ * Config Service - Guild Configuration (Per-Server Settings)
+ *
+ * Each Discord server (guild) has its own config: category, creator channel,
+ * delete delay, name template, etc. Stored in guild_config table.
+ */
+
 import {
   query,
   queryOne,
@@ -5,11 +12,12 @@ import {
   type GuildConfig,
 } from "../db/postgres.js";
 
+// Default values when a setting is not in the DB
 const DEFAULTS = {
   nameTemplate: "{username}'s Room",
   brandColor: "#5865F2",
   cooldownSeconds: 60,
-  deleteDelaySeconds: 300,
+  deleteDelaySeconds: 10,
   claimTimeoutSeconds: 120,
   maxChannelsPerUser: 1,
 } as const;
@@ -27,6 +35,10 @@ export type ResolvedGuildConfig = GuildConfig & {
   maxChannelsPerUser: number;
 };
 
+/**
+ * Get config for a guild. Merges DB row with DEFAULTS.
+ * Returns null if guild has not run /setup.
+ */
 export async function getConfig(
   guildId: string
 ): Promise<ResolvedGuildConfig | null> {
@@ -38,6 +50,9 @@ export async function getConfig(
   return { ...DEFAULTS, ...row } as ResolvedGuildConfig;
 }
 
+/**
+ * Update specific config fields for a guild (partial update).
+ */
 export async function upsertConfig(
   guildId: string,
   partial: Partial<Omit<GuildConfig, "guildId">>
@@ -56,6 +71,9 @@ export async function upsertConfig(
   );
 }
 
+/**
+ * Insert or update full guild config (used by /setup and /reset).
+ */
 export async function upsertConfigFull(
   guildId: string,
   data: Partial<GuildConfig>
@@ -113,6 +131,9 @@ export async function upsertConfigFull(
   );
 }
 
+/**
+ * Get all guild IDs that have config (for startup recovery).
+ */
 export async function getGuildIds(): Promise<string[]> {
   const rows = await queryAll<{ guildId: string }>(
     `SELECT "guildId" FROM guild_config`

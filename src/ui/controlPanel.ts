@@ -1,3 +1,9 @@
+/**
+ * Control Panel UI - Embed, Buttons, Select Menus, Modals
+ *
+ * Builds the embed and components for the control panel message.
+ * Discord limits: 1 select menu per ActionRow, max 5 ActionRows per message.
+ */
 import {
   EmbedBuilder,
   ActionRowBuilder,
@@ -11,6 +17,7 @@ import {
 } from "discord.js";
 import type { GuildConfig } from "../db/postgres.js";
 
+// Custom IDs for button/select interactions (must match interactionCreate handler)
 const CUSTOM_IDS = {
   rename: "vc:rename",
   limit: "vc:limit",
@@ -23,6 +30,7 @@ const CUSTOM_IDS = {
   kick: "vc:kick",
   ban: "vc:ban",
   unban: "vc:unban",
+  unbanBtn: "vc:unban:btn",
 } as const;
 
 export const MODAL_IDS = {
@@ -34,12 +42,18 @@ export function buildControlPanelEmbed(config: GuildConfig): EmbedBuilder {
   const color = parseInt(config.brandColor.replace("#", ""), 16) || 0x5865f2;
 
   return new EmbedBuilder()
-    .setTitle("Voice Control Panel")
+    .setTitle("🎛 Voice Room Controls")
     .setDescription(
-      "**Premium Voice Management**\n\nUse the buttons below to control your dynamic voice channel.\n\n• **Rename** — Change your channel name\n• **Set Limit** — Set user limit (0 = unlimited)\n• **Lock / Unlock** — Control who can join\n• **Public / Private** — Change visibility\n• **Transfer** — Give ownership to another member\n• **Claim** — Take ownership if the current owner left\n• **Kick / Ban** — Manage members in your channel (Unban via `/vc unban`)"
+      "**Use the buttons below to manage your voice channel.**\n\n" +
+        "✏️ **Rename** — Change channel name\n" +
+        "👥 **Limit** — Set max users (0 = unlimited)\n" +
+        "🔒 **Lock / Unlock** — Control who can join\n" +
+        "🌐 **Public / Private** — Channel visibility\n" +
+        "👑 **Transfer / Claim** — Ownership changes\n" +
+        "👢 **Kick / Ban / Unban** — Manage members"
     )
     .setColor(color)
-    .setFooter({ text: "Voice Automation • Premium" })
+    .setFooter({ text: "✧ Galaxy Voice" })
     .setTimestamp();
 }
 
@@ -49,18 +63,22 @@ export function buildControlPanelComponents(): ActionRowBuilder<MessageActionRow
       new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.rename)
         .setLabel("Rename")
+        .setEmoji({ name: "✏️" })
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.limit)
-        .setLabel("Set Limit")
+        .setLabel("Limit")
+        .setEmoji({ name: "👥" })
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.lock)
         .setLabel("Lock")
+        .setEmoji({ name: "🔒" })
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.unlock)
         .setLabel("Unlock")
+        .setEmoji({ name: "🔓" })
         .setStyle(ButtonStyle.Success)
     );
 
@@ -69,51 +87,58 @@ export function buildControlPanelComponents(): ActionRowBuilder<MessageActionRow
       new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.public)
         .setLabel("Public")
+        .setEmoji({ name: "🌐" })
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.private)
         .setLabel("Private")
+        .setEmoji({ name: "🔐" })
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.claim)
         .setLabel("Claim")
-        .setStyle(ButtonStyle.Danger)
+        .setEmoji({ name: "👑" })
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(CUSTOM_IDS.unbanBtn)
+        .setLabel("Unban")
+        .setEmoji({ name: "✅" })
+        .setStyle(ButtonStyle.Secondary)
     );
 
   const row3 = new ActionRowBuilder<MessageActionRowComponentBuilder>()
     .addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(CUSTOM_IDS.transfer)
-        .setPlaceholder("Select user to transfer ownership")
+        .setPlaceholder("↗️ Transfer ownership to…")
         .setMinValues(1)
         .setMaxValues(1)
     );
 
+  // Discord: 1 select menu per ActionRow, max 5 ActionRows per message
   const row4 = new ActionRowBuilder<MessageActionRowComponentBuilder>()
     .addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(CUSTOM_IDS.kick)
-        .setPlaceholder("Select user to kick")
+        .setPlaceholder("👢 Kick user…")
         .setMinValues(1)
         .setMaxValues(1)
     );
-
   const row5 = new ActionRowBuilder<MessageActionRowComponentBuilder>()
     .addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(CUSTOM_IDS.ban)
-        .setPlaceholder("Select user to ban")
+        .setPlaceholder("🚫 Ban user…")
         .setMinValues(1)
         .setMaxValues(1)
     );
-
   return [row1, row2, row3, row4, row5];
 }
 
 export function buildRenameModal(): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(MODAL_IDS.rename)
-    .setTitle("Rename Channel")
+    .setTitle("✏️ Rename Channel")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
@@ -131,7 +156,7 @@ export function buildRenameModal(): ModalBuilder {
 export function buildLimitModal(): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(MODAL_IDS.limit)
-    .setTitle("Set User Limit")
+    .setTitle("👥 Set User Limit")
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()

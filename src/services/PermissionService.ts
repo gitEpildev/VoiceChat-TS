@@ -1,10 +1,41 @@
+/**
+ * Permission Service - Admin Checks and Channel Permission Overwrites
+ *
+ * - canRunAdminCommand: server owner or BOT_OWNER
+ * - setOwnerPermissions: give room owner lock/unlock, mute, move
+ * - setSideChatPermissions: who can see the room's text channel
+ */
 import {
+  type Guild,
   type GuildMember,
   type VoiceChannel,
   type TextChannel,
   PermissionFlagsBits,
-  ChannelType,
 } from "discord.js";
+
+/** Bot owners from BOT_OWNER env (comma-separated user IDs). Can use admin commands in any server. */
+export function getBotOwnerIds(): string[] {
+  const raw = process.env.BOT_OWNER ?? "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function isBotOwner(userId: string): boolean {
+  return getBotOwnerIds().includes(userId);
+}
+
+/** True if the user is the actual owner of the Discord server (guild). */
+export function isGuildOwner(guild: Guild, userId: string): boolean {
+  return guild.ownerId === userId;
+}
+
+/** True if the user may run admin commands: bot owner or server owner. */
+export function canRunAdminCommand(guild: Guild | null, userId: string): boolean {
+  if (!guild) return false;
+  return isBotOwner(userId) || isGuildOwner(guild, userId);
+}
 
 export function isAdmin(member: GuildMember): boolean {
   return member.permissions.has(PermissionFlagsBits.ManageGuild);

@@ -6,6 +6,7 @@ import {
   syncSideChatPermissions,
   deleteVoiceChannel,
 } from "../../services/VoiceService.js";
+import { ensureRoomControlPanel } from "../../services/ControlPanelService.js";
 import { scheduleDelete } from "../../utils/timers.js";
 
 export async function handleRepair(
@@ -34,8 +35,14 @@ export async function handleRepair(
     try {
       await guild.channels.fetch(config.categoryId);
     } catch {
+      await query(`DELETE FROM voice_channels WHERE "guildId" = $1`, [guild.id]);
+      await query(`DELETE FROM cooldowns WHERE "guildId" = $1`, [guild.id]);
+      await query(
+        `UPDATE guild_config SET "categoryId" = NULL, "creatorChannelId" = NULL, "controlPanelChannelId" = NULL, "controlPanelMessageId" = NULL WHERE "guildId" = $1`,
+        [guild.id]
+      );
       await interaction.editReply({
-        content: "Category no longer exists. Run /setup again to create a fresh setup.",
+        content: "✅ Stale config cleared (channels were deleted). Run `/setup` to create a fresh setup.",
       });
       return;
     }
@@ -84,16 +91,28 @@ export async function handleRepair(
         removed++;
         continue;
       }
-      const members = (voiceCh as import("discord.js").VoiceChannel).members;
+      const botUserId = interaction.client.user?.id ?? "";
+      if (botUserId && textCh.isTextBased()) {
+        const didRepair = await ensureRoomControlPanel(
+          textCh as import("discord.js").TextChannel,
+          config,
+          botUserId
+        );
+        if (didRepair) repaired++;
+      }
       await syncSideChatPermissions(
         voiceCh as import("discord.js").VoiceChannel,
         textCh as import("discord.js").TextChannel,
         vc.ownerId
       );
-      if (members.size === 0) {
+      const countInChannel = guild.voiceStates.cache.filter(
+        (vs) => vs.channelId === vc.voiceChannelId
+      ).size;
+      if (countInChannel === 0) {
+        const delayMs = Math.max(1000, (config.deleteDelaySeconds ?? 10) * 1000);
         scheduleDelete(
           vc.voiceChannelId,
-          config.deleteDelaySeconds * 1000,
+          delayMs,
           async () => {
             try {
               const v = await guild.channels.fetch(vc.voiceChannelId);
@@ -113,7 +132,13 @@ export async function handleRepair(
     }
   }
 
+  const panelNote =
+    repaired > 0
+      ? `Control panels reposted: ${repaired}. `
+      : config.controlPanelChannelId
+        ? "Control panel OK. "
+        : "";
   await interaction.editReply({
-    content: `Repair complete. Control panel reposted: ${repaired > 0 ? "Yes" : "No"}. Stale entries removed: ${removed}.`,
+    content: `Repair complete. ${panelNote}Stale entries removed: ${removed}.`,
   });
 }

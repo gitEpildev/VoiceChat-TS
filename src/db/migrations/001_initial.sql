@@ -1,3 +1,7 @@
+-- VoiceChat-TS Initial Schema
+-- guild_config: one row per Discord server (guild)
+-- voice_channels: user-created voice + text channel pairs
+-- cooldowns: prevents spam-creating channels
 CREATE TABLE IF NOT EXISTS guild_config (
   "guildId" VARCHAR(20) PRIMARY KEY,
   enabled INTEGER NOT NULL DEFAULT 1,

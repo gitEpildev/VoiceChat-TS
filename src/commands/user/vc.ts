@@ -69,7 +69,7 @@ export async function handleVc(
         return;
       }
       await (voiceChannel as VoiceChannel).setName(name.trim().slice(0, 100));
-      await interaction.reply({ content: "Channel renamed.", ephemeral: true });
+      await interaction.reply({ content: "✏️ Channel renamed.", ephemeral: true });
       return;
     }
 
@@ -85,7 +85,7 @@ export async function handleVc(
         return;
       }
       await (voiceChannel as VoiceChannel).setUserLimit(num);
-      await interaction.reply({ content: `User limit set to ${num}.`, ephemeral: true });
+      await interaction.reply({ content: `👥 User limit set to ${num}.`, ephemeral: true });
       return;
     }
 
@@ -95,7 +95,7 @@ export async function handleVc(
         return;
       }
       await setOwnerPermissions(voiceChannel as VoiceChannel, vc.ownerId, true);
-      await interaction.reply({ content: "Channel locked.", ephemeral: true });
+      await interaction.reply({ content: "🔒 Channel locked.", ephemeral: true });
       await log(interaction.client, guildId, "lock", {
         userId: member.user.id,
         userName: member.user.username,
@@ -111,7 +111,7 @@ export async function handleVc(
         return;
       }
       await setOwnerPermissions(voiceChannel as VoiceChannel, vc.ownerId, false);
-      await interaction.reply({ content: "Channel unlocked.", ephemeral: true });
+      await interaction.reply({ content: "🔓 Channel unlocked.", ephemeral: true });
       await log(interaction.client, guildId, "unlock", {
         userId: member.user.id,
         userName: member.user.username,
@@ -127,7 +127,7 @@ export async function handleVc(
         return;
       }
       await (voiceChannel as VoiceChannel).permissionOverwrites.edit(interaction.guild!.id, { Connect: true });
-      await interaction.reply({ content: "Channel is now public.", ephemeral: true });
+      await interaction.reply({ content: "🌐 Channel is now public.", ephemeral: true });
       await log(interaction.client, guildId, "privacy_change", {
         userId: member.user.id,
         userName: member.user.username,
@@ -144,7 +144,7 @@ export async function handleVc(
         return;
       }
       await (voiceChannel as VoiceChannel).permissionOverwrites.edit(interaction.guild!.id, { Connect: false });
-      await interaction.reply({ content: "Channel is now private.", ephemeral: true });
+      await interaction.reply({ content: "🔐 Channel is now private.", ephemeral: true });
       await log(interaction.client, guildId, "privacy_change", {
         userId: member.user.id,
         userName: member.user.username,
@@ -186,7 +186,7 @@ export async function handleVc(
       }
       await setOwnerPermissions(voiceChannel as VoiceChannel, targetUser.id, false);
       await interaction.reply({
-        content: `Ownership transferred to ${targetUser}.`,
+        content: `↗️ Ownership transferred to ${targetUser}.`,
         ephemeral: true,
       });
       await log(interaction.client, guildId, "owner_transferred", {
@@ -208,7 +208,7 @@ export async function handleVc(
       const unbanTarget = interaction.options.getUser("user", true);
       await (voiceChannel as VoiceChannel).permissionOverwrites.delete(unbanTarget.id);
       await interaction.reply({
-        content: `${unbanTarget} has been unbanned from this channel.`,
+        content: `✅ ${unbanTarget} has been unbanned from this channel.`,
         ephemeral: true,
       });
       await log(interaction.client, guildId, "unban", {
@@ -242,7 +242,7 @@ export async function handleVc(
         );
       }
       await interaction.reply({
-        content: "You are now the owner of this channel.",
+        content: "👑 You are now the owner of this channel.",
         ephemeral: true,
       });
       await log(interaction.client, guildId, "claim_executed", {
