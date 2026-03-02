@@ -176,19 +176,11 @@ client.once("ready", async () => {
   if (clientId && token) {
     try {
       const rest = new REST({ version: "10" }).setToken(token);
-      // Clear global commands (we use guild-specific)
-      await rest.put(Routes.applicationCommands(clientId), { body: [] });
-      // Deploy slash commands to each server the bot is in
-      for (const [guildId, guild] of client.guilds.cache) {
-        try {
-          await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
-            body: commands,
-          });
-          console.log(`Commands deployed to guild: ${guild.name} (${guildId})`);
-        } catch (e) {
-          console.error(`Failed to deploy commands to ${guild.name}:`, e);
-        }
-      }
+      // Deploy slash commands globally so they appear in all servers (including new ones)
+      const result = await rest.put(Routes.applicationCommands(clientId), {
+        body: commands,
+      });
+      console.log(`Commands deployed globally: ${Array.isArray(result) ? result.length : 0} commands`);
     } catch (err) {
       console.error("Command deployment error:", err);
     }
