@@ -24,7 +24,7 @@ A Discord bot that creates personal voice channels when users join a "Join To Cr
 - **Auto-Delete** — Empty rooms are deleted after a configurable delay (default 10 seconds)
 - **Claim System** — Take ownership when the original owner leaves
 - **Logging** — Optional log channel for events
-- **Multi-Guild** — Works in multiple servers
+- **Multi-Guild** — Works in multiple servers; each server has its own config (guildId-scoped). Different channel setups per server.
 - **Restart Recovery** — Re-schedules delete timers and repairs state on startup
 
 ## For New Coders
@@ -67,6 +67,16 @@ src/
 2. **VoiceService.createVoiceChannel** creates voice + text channels, sets permissions, moves user, posts control panel
 3. **User leaves room** → If empty, `scheduleDelete` runs after delay, then deletes channels and DB row
 4. **Button clicks** → `interactionCreate` handles Rename, Lock, Kick, etc.
+
+### Multi-Guild (Multiple Servers)
+
+The bot uses **guild ID** for uniqueness. Each server has:
+
+- Its own `guild_config` (category, creator channel, delete delay, etc.)
+- Its own `voice_channels` rows
+- Its own `cooldowns` (per guild + user)
+
+All DB queries and lookups validate `guildId` so one server's channels are never confused with another's.
 
 ### Environment Variables
 

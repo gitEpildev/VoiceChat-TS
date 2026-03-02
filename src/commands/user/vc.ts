@@ -35,8 +35,8 @@ export async function handleVc(
     return;
   }
 
-  const vc = await getVoiceChannel(voiceChannel.id);
-  if (!vc) {
+  const vc = await getVoiceChannel(voiceChannel.id, guildId);
+  if (!vc || vc.guildId !== guildId) {
     await interaction.reply({
       content: "This voice channel is not managed by the bot.",
       ephemeral: true,

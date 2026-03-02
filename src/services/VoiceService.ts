@@ -33,22 +33,37 @@ export interface VoiceChannelRow {
   lastOwnerSeenAt: number;
 }
 
+/**
+ * Get voice room by voice channel ID. Optionally validate guildId for multi-guild safety.
+ * Each server has its own config; channel IDs are unique per guild.
+ */
 export async function getVoiceChannel(
-  voiceChannelId: string
+  voiceChannelId: string,
+  guildId?: string
 ): Promise<VoiceChannelRow | null> {
-  return queryOne<VoiceChannelRow>(
+  const row = await queryOne<VoiceChannelRow>(
     `SELECT * FROM voice_channels WHERE "voiceChannelId" = $1`,
     [voiceChannelId]
   );
+  if (!row) return null;
+  if (guildId && row.guildId !== guildId) return null; // Ensure channel belongs to this server
+  return row;
 }
 
+/**
+ * Get voice room by text channel ID. Optionally validate guildId for multi-guild safety.
+ */
 export async function getVoiceChannelByTextChannelId(
-  textChannelId: string
+  textChannelId: string,
+  guildId?: string
 ): Promise<VoiceChannelRow | null> {
-  return queryOne<VoiceChannelRow>(
+  const row = await queryOne<VoiceChannelRow>(
     `SELECT * FROM voice_channels WHERE "textChannelId" = $1`,
     [textChannelId]
   );
+  if (!row) return null;
+  if (guildId && row.guildId !== guildId) return null;
+  return row;
 }
 
 export async function getChannelsByOwner(

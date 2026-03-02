@@ -11,6 +11,10 @@ import {
 
 export const commands: RESTPostAPIChatInputApplicationCommandsJSONBody[] = [
   new SlashCommandBuilder()
+    .setName("help")
+    .setDescription("Show bot info and command list")
+    .toJSON(),
+  new SlashCommandBuilder()
     .setName("setup")
     .setDescription("Set up voice automation (category + creator channel)")
     .toJSON(),

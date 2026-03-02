@@ -14,6 +14,7 @@ import { handleDisable } from "./admin/disable.js";
 import { handleRepair } from "./admin/repair.js";
 import { handleReset } from "./admin/reset.js";
 import { handleVc } from "./user/vc.js";
+import { handleHelp } from "./user/help.js";
 
 const ADMIN_COMMANDS = [
   "setup",
@@ -43,6 +44,9 @@ export async function handleCommand(
   }
 
   switch (name) {
+    case "help":
+      await handleHelp(interaction);
+      break;
     case "setup":
       await handleSetup(interaction);
       break;

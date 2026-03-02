@@ -79,11 +79,12 @@ async function resolveVoiceContext(interaction: ButtonInteraction | UserSelectMe
   const config = await getConfig(interaction.guildId!);
   if (!config) return null;
 
+  const guildId = interaction.guildId!;
   let voiceChannel: VoiceChannel | null = await getMemberVoiceChannel(member);
-  let vc = voiceChannel ? await getVoiceChannel(voiceChannel.id) : null;
+  let vc = voiceChannel ? await getVoiceChannel(voiceChannel.id, guildId) : null;
 
-  const vcByText = await getVoiceChannelByTextChannelId(interaction.channelId ?? "");
-  if (!vc && vcByText && member.voice.channelId === vcByText.voiceChannelId) {
+  const vcByText = await getVoiceChannelByTextChannelId(interaction.channelId ?? "", guildId);
+  if (!vc && vcByText && vcByText.guildId === guildId && member.voice.channelId === vcByText.voiceChannelId) {
     const ch = await interaction.guild.channels.fetch(vcByText.voiceChannelId);
     voiceChannel = ch?.isVoiceBased() ? (ch as VoiceChannel) : null;
     vc = vcByText;
@@ -278,7 +279,7 @@ export function registerInteractionCreate(client: Client): void {
             await interaction.reply({ content: "You must be in a voice channel.", ephemeral: true });
             return;
           }
-          const vc = await getVoiceChannel(member.voice.channelId);
+          const vc = await getVoiceChannel(member.voice.channelId, interaction.guildId ?? undefined);
           if (!vc || vc.ownerId !== member.id) {
             await interaction.reply({ content: "Only the owner can rename.", ephemeral: true });
             return;
@@ -305,7 +306,7 @@ export function registerInteractionCreate(client: Client): void {
             await interaction.reply({ content: "You must be in a voice channel.", ephemeral: true });
             return;
           }
-          const vc = await getVoiceChannel(voiceChannel.id);
+          const vc = await getVoiceChannel(voiceChannel.id, interaction.guildId ?? undefined);
           if (!vc || vc.ownerId !== member.id) {
             await interaction.reply({ content: "Only the owner can set the limit.", ephemeral: true });
             return;

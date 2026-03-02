@@ -1,8 +1,9 @@
 /**
  * Config Service - Guild Configuration (Per-Server Settings)
  *
- * Each Discord server (guild) has its own config: category, creator channel,
- * delete delay, name template, etc. Stored in guild_config table.
+ * Each Discord server (guild) has its own config, keyed by guildId for uniqueness.
+ * Config includes: category, creator channel, delete delay, name template, etc.
+ * Multi-guild: different servers can have different channel configs.
  */
 
 import {

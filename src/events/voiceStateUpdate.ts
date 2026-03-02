@@ -35,7 +35,7 @@ export function registerVoiceStateUpdate(client: Client): void {
       const guildId = newState.guild.id;
 
       if (newState.channelId === newState.member?.voice.channelId) {
-        const vc = await getVoiceChannel(newState.channelId!);
+        const vc = await getVoiceChannel(newState.channelId!, guildId);
         if (vc && vc.ownerId === newState.member.id) {
           await updateLastOwnerSeen(newState.channelId!, Date.now());
         }
@@ -105,7 +105,7 @@ export function registerVoiceStateUpdate(client: Client): void {
 
       const leftChannelId = oldState.channelId;
       if (leftChannelId) {
-        const vc = await getVoiceChannel(leftChannelId);
+        const vc = await getVoiceChannel(leftChannelId, guildId);
         if (vc) {
           const textChannel = await client.channels.fetch(vc.textChannelId);
 
@@ -147,7 +147,7 @@ export function registerVoiceStateUpdate(client: Client): void {
 
       const joinedChannelId = newState.channelId;
       if (joinedChannelId) {
-        const vc = await getVoiceChannel(joinedChannelId);
+        const vc = await getVoiceChannel(joinedChannelId, guildId);
         if (vc && newState.member) {
           cancelDelete(joinedChannelId);
           const textChannel = await client.channels.fetch(vc.textChannelId);
