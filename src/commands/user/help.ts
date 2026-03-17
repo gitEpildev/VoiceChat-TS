@@ -8,39 +8,44 @@ export async function handleHelp(
   interaction: ChatInputCommandInteraction
 ): Promise<void> {
   const embed = new EmbedBuilder()
-    .setTitle("🎛 VoiceChat-TS — Help")
+    .setTitle("Voice Channel System Setup")
     .setDescription(
-      "Join the **Join To Create** channel to auto-create your voice room.\n" +
-        "Use the control panel in your room's text channel to manage it."
+      "This bot allows dynamic control of temporary voice channels with advanced admin tools"
     )
     .addFields(
       {
-        name: "Admin Commands",
+        name: "How to Use",
         value:
-          "`/setup` — Create category & creator channel\n" +
-          "`/config view` — View settings\n" +
-          "`/config set option value` — Change settings\n" +
-          "`/setlogchannel` — Set log channel\n" +
-          "`/enable` / `/disable` — Toggle bot\n" +
-          "`/repair` — Fix control panels\n" +
-          "`/reset` — Full reset",
+          "• Join a voice channel to create or manage it\n" +
+          "• Use the control panel buttons to manage settings",
         inline: false,
       },
       {
-        name: "User Commands",
+        name: "Permissions Required",
         value:
-          "`/vc rename <name>` — Rename room\n" +
-          "`/vc limit <0-99>` — User limit\n" +
-          "`/vc lock` / `/vc unlock`\n" +
-          "`/vc public` / `/vc private`\n" +
-          "`/vc transfer <user>` — Give ownership\n" +
-          "`/vc claim` — Take ownership if owner left\n" +
-          "`/vc unban <user>` — Unban user",
+          "• Administrator permission is required for full control\n" +
+          "• Admin Lock is only available to admins who own the VC",
+        inline: false,
+      },
+      {
+        name: "Admin Lock Info",
+        value:
+          "• Locks the channel to admins only\n" +
+          "• Automatically removes non admin users\n" +
+          "• Blocks future joins from non admins",
+        inline: false,
+      },
+      {
+        name: "Tips",
+        value:
+          "• Use Limit to control size\n" +
+          "• Use Private for restricted access\n" +
+          "• Transfer ownership if needed",
         inline: false,
       }
     )
     .setColor(0x5865f2)
-    .setFooter({ text: "VoiceChat-TS · epildevconnect ltd" });
+    .setFooter({ text: "Keep channels clean and controlled" });
 
   await interaction.reply({ embeds: [embed], ephemeral: true });
 }

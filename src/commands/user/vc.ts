@@ -5,6 +5,7 @@ import {
   getVoiceChannel,
   updateOwner,
   updateLastOwnerSeen,
+  setLocked,
 } from "../../services/VoiceService.js";
 import {
   setOwnerPermissions,
@@ -95,6 +96,7 @@ export async function handleVc(
         return;
       }
       await setOwnerPermissions(voiceChannel as VoiceChannel, vc.ownerId, true);
+       await setLocked(voiceChannel.id, true);
       await interaction.reply({ content: "🔒 Channel locked.", ephemeral: true });
       await log(interaction.client, guildId, "lock", {
         userId: member.user.id,
@@ -111,6 +113,7 @@ export async function handleVc(
         return;
       }
       await setOwnerPermissions(voiceChannel as VoiceChannel, vc.ownerId, false);
+      await setLocked(voiceChannel.id, false);
       await interaction.reply({ content: "🔓 Channel unlocked.", ephemeral: true });
       await log(interaction.client, guildId, "unlock", {
         userId: member.user.id,

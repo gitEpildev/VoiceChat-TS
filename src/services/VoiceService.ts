@@ -31,6 +31,8 @@ export interface VoiceChannelRow {
   ownerId: string;
   createdAt: number;
   lastOwnerSeenAt: number;
+  locked: boolean;
+  adminLocked: boolean;
 }
 
 /**
@@ -200,9 +202,9 @@ export async function createVoiceChannel(
   );
 
   await query(
-    `INSERT INTO voice_channels ("voiceChannelId", "guildId", "textChannelId", "ownerId", "createdAt", "lastOwnerSeenAt")
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [voiceChannel.id, guild.id, textChannel.id, member.id, now, now]
+    `INSERT INTO voice_channels ("voiceChannelId", "guildId", "textChannelId", "ownerId", "createdAt", "lastOwnerSeenAt", "locked", "adminLocked")
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [voiceChannel.id, guild.id, textChannel.id, member.id, now, now, false, false]
   );
 
   await query(
@@ -257,6 +259,26 @@ export async function updateLastOwnerSeen(
   await query(
     `UPDATE voice_channels SET "lastOwnerSeenAt" = $2 WHERE "voiceChannelId" = $1`,
     [voiceChannelId, timestamp]
+  );
+}
+
+export async function setLocked(
+  voiceChannelId: string,
+  locked: boolean
+): Promise<void> {
+  await query(
+    `UPDATE voice_channels SET "locked" = $2 WHERE "voiceChannelId" = $1`,
+    [voiceChannelId, locked]
+  );
+}
+
+export async function setAdminLock(
+  voiceChannelId: string,
+  locked: boolean
+): Promise<void> {
+  await query(
+    `UPDATE voice_channels SET "adminLocked" = $2 WHERE "voiceChannelId" = $1`,
+    [voiceChannelId, locked]
   );
 }
 

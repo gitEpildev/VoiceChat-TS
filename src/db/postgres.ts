@@ -41,6 +41,8 @@ export interface VoiceChannel {
   ownerId: string;
   createdAt: number;
   lastOwnerSeenAt: number;
+  locked: boolean;
+  adminLocked: boolean;
 }
 
 /** Cooldown tracking for channel creation (prevents spam) */

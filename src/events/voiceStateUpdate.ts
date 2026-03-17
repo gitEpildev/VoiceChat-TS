@@ -7,6 +7,7 @@
  */
 import type { VoiceState } from "discord.js";
 import type { Client } from "discord.js";
+import { EmbedBuilder } from "discord.js";
 import { getConfig } from "../services/ConfigService.js";
 
 // Prevents duplicate room creation when event fires multiple times
@@ -26,6 +27,7 @@ import {
   addMemberToSideChat,
   removeMemberFromSideChat,
 } from "../services/VoiceService.js";
+import { isAdmin } from "../services/PermissionService.js";
 import { scheduleDelete, cancelDelete } from "../utils/timers.js";
 import { log } from "../services/LoggingService.js";
 
@@ -59,7 +61,11 @@ export function registerVoiceStateUpdate(client: Client): void {
             await member.voice.disconnect();
             try {
               const dm = await member.createDM();
-              await dm.send(check.reason ?? "Cannot create channel.");
+              const embed = new EmbedBuilder()
+                .setTitle("Voice Channel Limit Reached")
+                .setDescription(check.reason ?? "Cannot create channel.")
+                .setColor(0x5865f2);
+              await dm.send({ embeds: [embed] });
             } catch {
               if (config.controlPanelChannelId) {
                 const ch = await client.channels.fetch(config.controlPanelChannelId).catch(() => null);
@@ -149,6 +155,40 @@ export function registerVoiceStateUpdate(client: Client): void {
       if (joinedChannelId) {
         const vc = await getVoiceChannel(joinedChannelId, guildId);
         if (vc && newState.member) {
+          if (vc.adminLocked && !isAdmin(newState.member)) {
+            try {
+              await newState.disconnect();
+            } catch {
+              try {
+                await newState.member.voice.disconnect();
+              } catch {
+                // ignore disconnect failures
+              }
+            }
+            try {
+              const dm = await newState.member.createDM();
+              const embed = new EmbedBuilder()
+                .setTitle("Voice Channel Restricted")
+                .setDescription("This voice channel is restricted to administrators.")
+                .setColor(0x5865f2);
+              await dm.send({ embeds: [embed] });
+            } catch {
+              const textChannel = await client.channels
+                .fetch(vc.textChannelId)
+                .catch(() => null);
+              if (textChannel?.isTextBased() && "send" in textChannel) {
+                const embed = new EmbedBuilder()
+                  .setTitle("Voice Channel Restricted")
+                  .setDescription("This voice channel is restricted to administrators.")
+                  .setColor(0x5865f2);
+                await (textChannel as import("discord.js").TextChannel).send({
+                  content: `${newState.member}`,
+                  embeds: [embed],
+                });
+              }
+            }
+            return;
+          }
           cancelDelete(joinedChannelId);
           const textChannel = await client.channels.fetch(vc.textChannelId);
           if (textChannel?.isTextBased()) {

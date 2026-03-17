@@ -27,6 +27,8 @@ import {
   updateOwner,
   updateLastOwnerSeen,
   syncSideChatPermissions,
+  setLocked,
+  setAdminLock,
 } from "../services/VoiceService.js";
 import {
   setOwnerPermissions,
@@ -38,6 +40,7 @@ import {
   buildRenameModal,
   buildLimitModal,
   MODAL_IDS,
+  buildControlPanelComponents,
 } from "../ui/controlPanel.js";
 import { validateRename, validateLimit } from "../utils/validators.js";
 import { handleCommand } from "../commands/router.js";
@@ -55,6 +58,7 @@ const CUSTOM_IDS = [
   "vc:ban",
   "vc:unban",
   "vc:unban:btn",
+  "vc:adminlock",
 ] as const;
 
 function isControlPanelCustomId(id: string): id is (typeof CUSTOM_IDS)[number] {
@@ -158,6 +162,17 @@ export function registerInteractionCreate(client: Client): void {
               return;
             }
             await setOwnerPermissions(voiceChannel, vc.ownerId, true);
+            await setLocked(voiceChannel.id, true);
+            try {
+              await interaction.message.edit({
+                components: buildControlPanelComponents({
+                  locked: true,
+                  adminLocked: vc.adminLocked,
+                }),
+              });
+            } catch {
+              // ignore edit failures
+            }
             await interaction.reply({ content: "🔒 Channel locked.", ephemeral: true });
             await log(client, interaction.guildId!, "lock", {
               userId: member.id,
@@ -167,12 +182,91 @@ export function registerInteractionCreate(client: Client): void {
             });
             return;
 
+          case "vc:adminlock":
+            if (!isOwner || !isAdmin(member)) {
+              await interaction.reply({
+                content: "Admin Lock is only available to admins who own this voice channel.",
+                ephemeral: true,
+              });
+              return;
+            }
+            if (!vc.adminLocked) {
+              await setAdminLock(voiceChannel.id, true);
+              vc.adminLocked = true;
+              for (const [, m] of voiceChannel.members) {
+                if (!isAdmin(m) && !m.user.bot) {
+                  try {
+                    await m.voice.disconnect();
+                  } catch {
+                    // ignore disconnect failures
+                  }
+                }
+              }
+              try {
+                await interaction.message.edit({
+                  components: buildControlPanelComponents({
+                    locked: vc.locked,
+                    adminLocked: true,
+                  }),
+                });
+              } catch {
+                // ignore edit failures
+              }
+              await interaction.reply({
+                content: "🛡️ Admin Lock enabled. Only admins can use this channel.",
+                ephemeral: true,
+              });
+              await log(client, interaction.guildId!, "lock", {
+                userId: member.id,
+                userName: member.user.username,
+                channelId: voiceChannel.id,
+                guildName: interaction.guild!.name,
+                extra: "Admin Lock",
+              });
+            } else {
+              await setAdminLock(voiceChannel.id, false);
+              vc.adminLocked = false;
+              try {
+                await interaction.message.edit({
+                  components: buildControlPanelComponents({
+                    locked: vc.locked,
+                    adminLocked: false,
+                  }),
+                });
+              } catch {
+                // ignore edit failures
+              }
+              await interaction.reply({
+                content: "🛡️ Admin Lock disabled. Non-admins can use this channel again.",
+                ephemeral: true,
+              });
+              await log(client, interaction.guildId!, "unlock", {
+                userId: member.id,
+                userName: member.user.username,
+                channelId: voiceChannel.id,
+                guildName: interaction.guild!.name,
+                extra: "Admin Lock cleared",
+              });
+            }
+            return;
+
           case "vc:unlock":
             if (!isOwner) {
               await interaction.reply({ content: "Only the channel owner can unlock.", ephemeral: true });
               return;
             }
             await setOwnerPermissions(voiceChannel, vc.ownerId, false);
+            await setLocked(voiceChannel.id, false);
+            try {
+              await interaction.message.edit({
+                components: buildControlPanelComponents({
+                  locked: false,
+                  adminLocked: vc.adminLocked,
+                }),
+              });
+            } catch {
+              // ignore edit failures
+            }
             await interaction.reply({ content: "🔓 Channel unlocked.", ephemeral: true });
             await log(client, interaction.guildId!, "unlock", {
               userId: member.id,
@@ -323,7 +417,7 @@ export function registerInteractionCreate(client: Client): void {
 
         const ctx = await resolveVoiceContext(interaction);
         if (!ctx) return;
-        const { voiceChannel, vc, config } = ctx;
+        const { voiceChannel, vc } = ctx;
         const member = interaction.member as GuildMember;
         const targetUser = interaction.users.first();
         if (!targetUser) {
@@ -337,7 +431,9 @@ export function registerInteractionCreate(client: Client): void {
         }
 
         const isOwner = vc.ownerId === member.id;
-        const targetMember = await interaction.guild!.members.fetch(targetUser.id).catch(() => null);
+        const targetMember =
+          voiceChannel.members.get(targetUser.id) ??
+          (await interaction.guild!.members.fetch(targetUser.id).catch(() => null));
         if (targetMember && isAdmin(targetMember)) {
           await interaction.reply({ content: "Cannot target admins.", ephemeral: true });
           return;

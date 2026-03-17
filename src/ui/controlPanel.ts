@@ -31,6 +31,7 @@ const CUSTOM_IDS = {
   ban: "vc:ban",
   unban: "vc:unban",
   unbanBtn: "vc:unban:btn",
+  adminLock: "vc:adminlock",
 } as const;
 
 export const MODAL_IDS = {
@@ -44,20 +45,25 @@ export function buildControlPanelEmbed(config: GuildConfig): EmbedBuilder {
   return new EmbedBuilder()
     .setTitle("🎛 Voice Room Controls")
     .setDescription(
-      "**Use the buttons below to manage your voice channel.**\n\n" +
-        "✏️ **Rename** — Change channel name\n" +
-        "👥 **Limit** — Set max users (0 = unlimited)\n" +
-        "🔒 **Lock / Unlock** — Control who can join\n" +
-        "🌐 **Public / Private** — Channel visibility\n" +
-        "👑 **Transfer / Claim** — Ownership changes\n" +
-        "👢 **Kick / Ban / Unban** — Manage members"
+      "**Manage your voice channel using the options below.**\n\n" +
+        "**Core Controls** — Rename, limit, lock access\n" +
+        "**Visibility** — Public or private access\n" +
+        "**Ownership** — Claim and transfer room ownership\n" +
+        "**Moderation** — Kick, ban, and unban members\n" +
+        "**Admin Controls** — Admin-only channel lock"
     )
     .setColor(color)
     .setFooter({ text: "✧ Galaxy Voice" })
     .setTimestamp();
 }
 
-export function buildControlPanelComponents(): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
+export function buildControlPanelComponents(options?: {
+  locked?: boolean;
+  adminLocked?: boolean;
+}): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
+  const locked = options?.locked ?? false;
+  const adminLocked = options?.adminLocked ?? false;
+
   const row1 = new ActionRowBuilder<MessageActionRowComponentBuilder>()
     .addComponents(
       new ButtonBuilder()
@@ -71,15 +77,15 @@ export function buildControlPanelComponents(): ActionRowBuilder<MessageActionRow
         .setEmoji({ name: "👥" })
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(CUSTOM_IDS.lock)
-        .setLabel("Lock")
-        .setEmoji({ name: "🔒" })
-        .setStyle(ButtonStyle.Secondary),
+        .setCustomId(locked ? CUSTOM_IDS.unlock : CUSTOM_IDS.lock)
+        .setLabel(locked ? "Unlock" : "Lock")
+        .setEmoji({ name: locked ? "🔓" : "🔒" })
+        .setStyle(locked ? ButtonStyle.Success : ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(CUSTOM_IDS.unlock)
-        .setLabel("Unlock")
-        .setEmoji({ name: "🔓" })
-        .setStyle(ButtonStyle.Success)
+        .setCustomId(CUSTOM_IDS.adminLock)
+        .setLabel(adminLocked ? "Admin Unlock" : "Admin Lock")
+        .setEmoji({ name: "🛡️" })
+        .setStyle(adminLocked ? ButtonStyle.Secondary : ButtonStyle.Danger)
     );
 
   const row2 = new ActionRowBuilder<MessageActionRowComponentBuilder>()
@@ -110,7 +116,7 @@ export function buildControlPanelComponents(): ActionRowBuilder<MessageActionRow
     .addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(CUSTOM_IDS.transfer)
-        .setPlaceholder("↗️ Transfer ownership to…")
+        .setPlaceholder("↗️ Transfer")
         .setMinValues(1)
         .setMaxValues(1)
     );
@@ -120,7 +126,7 @@ export function buildControlPanelComponents(): ActionRowBuilder<MessageActionRow
     .addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(CUSTOM_IDS.kick)
-        .setPlaceholder("👢 Kick user…")
+        .setPlaceholder("👢 Kick")
         .setMinValues(1)
         .setMaxValues(1)
     );
@@ -128,7 +134,7 @@ export function buildControlPanelComponents(): ActionRowBuilder<MessageActionRow
     .addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(CUSTOM_IDS.ban)
-        .setPlaceholder("🚫 Ban user…")
+        .setPlaceholder("🚫 Ban")
         .setMinValues(1)
         .setMaxValues(1)
     );
