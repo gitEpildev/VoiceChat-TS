@@ -17,7 +17,6 @@ import { handleVc } from "./user/vc.js";
 import { handleHelp } from "./user/help.js";
 
 const ADMIN_COMMANDS = [
-  "help",
   "setup",
   "config",
   "setlogchannel",

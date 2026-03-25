@@ -28,6 +28,7 @@ import {
   removeMemberFromSideChat,
 } from "../services/VoiceService.js";
 import { isAdmin } from "../services/PermissionService.js";
+import { isWhitelisted } from "../services/WhitelistService.js";
 import { scheduleDelete, cancelDelete } from "../utils/timers.js";
 import { log } from "../services/LoggingService.js";
 
@@ -45,6 +46,50 @@ export function registerVoiceStateUpdate(client: Client): void {
 
       const config = await getConfig(guildId);
       if (!config || !config.enabled) return;
+
+      // Handle leaving a managed VC *before* the creator-channel branch. Otherwise a user who
+      // moves Personal VC → Join To Create in one action never triggers delete scheduling for
+      // the room they left (the creator block returned early and skipped this logic).
+      const leftChannelId = oldState.channelId;
+      if (leftChannelId) {
+        const vcLeft = await getVoiceChannel(leftChannelId, guildId);
+        if (vcLeft) {
+          const textChannel = await client.channels.fetch(vcLeft.textChannelId);
+
+          if (oldState.member && textChannel?.isTextBased()) {
+            await removeMemberFromSideChat(
+              textChannel as import("discord.js").TextChannel,
+              oldState.member.id
+            );
+          }
+
+          const countInChannel = newState.guild.voiceStates.cache.filter(
+            (vs) => vs.channelId === leftChannelId
+          ).size;
+          if (countInChannel === 0) {
+            const delayMs = Math.max(1000, (config.deleteDelaySeconds ?? 10) * 1000);
+            scheduleDelete(leftChannelId, delayMs, async () => {
+              try {
+                const v = await client.channels.fetch(leftChannelId);
+                const t = await client.channels.fetch(vcLeft.textChannelId);
+                if (v) await v.delete();
+                if (t) await t.delete();
+              } catch {
+                /* already deleted */
+              }
+              await deleteVoiceChannel(guildId, leftChannelId);
+              await log(client, guildId, "channel_deleted", {
+                channelId: leftChannelId,
+                guildName: newState.guild.name,
+              });
+            });
+          }
+
+          if (oldState.member?.id === vcLeft.ownerId) {
+            await updateLastOwnerSeen(leftChannelId, Date.now());
+          }
+        }
+      }
 
       if (config.creatorChannelId && newState.channelId === config.creatorChannelId) {
         const member = newState.member;
@@ -109,53 +154,25 @@ export function registerVoiceStateUpdate(client: Client): void {
         return;
       }
 
-      const leftChannelId = oldState.channelId;
-      if (leftChannelId) {
-        const vc = await getVoiceChannel(leftChannelId, guildId);
-        if (vc) {
-          const textChannel = await client.channels.fetch(vc.textChannelId);
-
-          if (oldState.member && textChannel?.isTextBased()) {
-            await removeMemberFromSideChat(
-              textChannel as import("discord.js").TextChannel,
-              oldState.member.id
-            );
-          }
-
-          // Use voice state cache for reliable count (voiceStateUpdate fires after cache update)
-          const countInChannel = newState.guild.voiceStates.cache.filter(
-            (vs) => vs.channelId === leftChannelId
-          ).size;
-          if (countInChannel === 0) {
-            const delayMs = Math.max(1000, (config.deleteDelaySeconds ?? 10) * 1000);
-            scheduleDelete(leftChannelId, delayMs, async () => {
-              try {
-                const v = await client.channels.fetch(leftChannelId);
-                const t = await client.channels.fetch(vc.textChannelId);
-                if (v) await v.delete();
-                if (t) await t.delete();
-              } catch {
-                /* already deleted */
-              }
-              await deleteVoiceChannel(guildId, leftChannelId);
-              await log(client, guildId, "channel_deleted", {
-                channelId: leftChannelId,
-                guildName: newState.guild.name,
-              });
-            });
-          }
-
-          if (oldState.member?.id === vc.ownerId) {
-            await updateLastOwnerSeen(leftChannelId, Date.now());
-          }
-        }
-      }
-
       const joinedChannelId = newState.channelId;
       if (joinedChannelId) {
         const vc = await getVoiceChannel(joinedChannelId, guildId);
         if (vc && newState.member) {
           if (vc.adminLocked && !isAdmin(newState.member)) {
+            if (await isWhitelisted(joinedChannelId, newState.member.id)) {
+              cancelDelete(joinedChannelId);
+              const textChannel = await client.channels.fetch(vc.textChannelId);
+              if (textChannel?.isTextBased()) {
+                await addMemberToSideChat(
+                  textChannel as import("discord.js").TextChannel,
+                  newState.member.id
+                );
+              }
+              if (newState.member.id === vc.ownerId) {
+                await updateLastOwnerSeen(joinedChannelId, Date.now());
+              }
+              return;
+            }
             try {
               await newState.disconnect();
             } catch {

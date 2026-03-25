@@ -30,6 +30,7 @@ import {
   setLocked,
   setAdminLock,
 } from "../services/VoiceService.js";
+import { addWhitelist, isWhitelisted, listWhitelist, removeWhitelist } from "../services/WhitelistService.js";
 import {
   setOwnerPermissions,
   isAdmin,
@@ -56,9 +57,11 @@ const CUSTOM_IDS = [
   "vc:claim",
   "vc:kick",
   "vc:ban",
+  "vc:ban:btn",
   "vc:unban",
   "vc:unban:btn",
   "vc:adminlock",
+  "vc:whitelist",
 ] as const;
 
 function isControlPanelCustomId(id: string): id is (typeof CUSTOM_IDS)[number] {
@@ -194,7 +197,11 @@ export function registerInteractionCreate(client: Client): void {
               await setAdminLock(voiceChannel.id, true);
               vc.adminLocked = true;
               for (const [, m] of voiceChannel.members) {
-                if (!isAdmin(m) && !m.user.bot) {
+                if (
+                  !isAdmin(m) &&
+                  !m.user.bot &&
+                  !(await isWhitelisted(voiceChannel.id, m.id))
+                ) {
                   try {
                     await m.voice.disconnect();
                   } catch {
@@ -248,6 +255,26 @@ export function registerInteractionCreate(client: Client): void {
                 extra: "Admin Lock cleared",
               });
             }
+            return;
+
+          case "vc:ban:btn":
+            if (!isOwner) {
+              await interaction.reply({ content: "Only the owner can ban.", ephemeral: true });
+              return;
+            }
+            await interaction.reply({
+              content: "Select a user to ban:",
+              ephemeral: true,
+              components: [
+                new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+                  new UserSelectMenuBuilder()
+                    .setCustomId("vc:ban")
+                    .setPlaceholder("🚫 Ban")
+                    .setMinValues(1)
+                    .setMaxValues(1)
+                ),
+              ],
+            });
             return;
 
           case "vc:unlock":
@@ -413,7 +440,7 @@ export function registerInteractionCreate(client: Client): void {
       }
 
       if (interaction.isUserSelectMenu()) {
-        if (!["vc:transfer", "vc:kick", "vc:ban", "vc:unban"].includes(interaction.customId)) return;
+        if (!["vc:transfer", "vc:kick", "vc:ban", "vc:unban", "vc:whitelist"].includes(interaction.customId)) return;
 
         const ctx = await resolveVoiceContext(interaction);
         if (!ctx) return;
@@ -425,7 +452,7 @@ export function registerInteractionCreate(client: Client): void {
           return;
         }
         const botUserId = client.user?.id ?? "";
-        if (isBot(targetUser.id, botUserId)) {
+        if (isBot(targetUser.id, botUserId) && interaction.customId !== "vc:whitelist") {
           await interaction.reply({ content: "Cannot target the bot.", ephemeral: true });
           return;
         }
@@ -522,6 +549,42 @@ export function registerInteractionCreate(client: Client): void {
               targetUserName: targetUser.username,
               channelId: voiceChannel.id,
               guildName: interaction.guild!.name,
+            });
+            return;
+
+          case "vc:whitelist":
+            if (!isOwner || !isAdmin(member)) {
+              await interaction.reply({
+                content: "Whitelist is only available to admins who own this voice channel.",
+                ephemeral: true,
+              });
+              return;
+            }
+            if (targetUser.bot) {
+              await interaction.reply({ content: "Bots do not need to be whitelisted.", ephemeral: true });
+              return;
+            }
+            const wasWhitelisted = await isWhitelisted(voiceChannel.id, targetUser.id);
+            if (wasWhitelisted) {
+              await removeWhitelist(voiceChannel.id, targetUser.id);
+            } else {
+              await addWhitelist(voiceChannel.id, targetUser.id, member.id);
+            }
+            const current = await listWhitelist(voiceChannel.id);
+            const mentions = current
+              .map((r) => `<@${r.userId}>`)
+              .slice(0, 20)
+              .join(", ");
+            const extra = current.length > 20 ? `\nPlus ${current.length - 20} more.` : "";
+            await interaction.reply({
+              content:
+                (wasWhitelisted
+                  ? `🛡 Removed ${targetUser} from the whitelist.`
+                  : `🛡 Added ${targetUser} to the whitelist.`) +
+                `\n\nCurrent whitelist (${current.length}): ` +
+                (mentions || "None") +
+                extra,
+              ephemeral: true,
             });
             return;
         }

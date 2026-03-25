@@ -29,9 +29,11 @@ const CUSTOM_IDS = {
   claim: "vc:claim",
   kick: "vc:kick",
   ban: "vc:ban",
+  banBtn: "vc:ban:btn",
   unban: "vc:unban",
   unbanBtn: "vc:unban:btn",
   adminLock: "vc:adminlock",
+  whitelist: "vc:whitelist",
 } as const;
 
 export const MODAL_IDS = {
@@ -46,11 +48,11 @@ export function buildControlPanelEmbed(config: GuildConfig): EmbedBuilder {
     .setTitle("🎛 Voice Room Controls")
     .setDescription(
       "**Manage your voice channel using the options below.**\n\n" +
-        "**Core Controls** — Rename, limit, lock access\n" +
-        "**Visibility** — Public or private access\n" +
-        "**Ownership** — Claim and transfer room ownership\n" +
-        "**Moderation** — Kick, ban, and unban members\n" +
-        "**Admin Controls** — Admin-only channel lock"
+        "**Core Controls** - Rename, limit, lock access\n" +
+        "**Visibility** - Public or private access\n" +
+        "**Ownership** - Claim and transfer room ownership\n" +
+        "**Moderation** - Kick, ban, and unban members\n" +
+        "**Admin Controls** - Admin only channel lock"
     )
     .setColor(color)
     .setFooter({ text: "✧ Galaxy Voice" })
@@ -106,6 +108,11 @@ export function buildControlPanelComponents(options?: {
         .setEmoji({ name: "👑" })
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
+        .setCustomId(CUSTOM_IDS.banBtn)
+        .setLabel("Ban")
+        .setEmoji({ name: "🚫" })
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
         .setCustomId(CUSTOM_IDS.unbanBtn)
         .setLabel("Unban")
         .setEmoji({ name: "✅" })
@@ -133,8 +140,8 @@ export function buildControlPanelComponents(options?: {
   const row5 = new ActionRowBuilder<MessageActionRowComponentBuilder>()
     .addComponents(
       new UserSelectMenuBuilder()
-        .setCustomId(CUSTOM_IDS.ban)
-        .setPlaceholder("🚫 Ban")
+        .setCustomId(CUSTOM_IDS.whitelist)
+        .setPlaceholder("🛡 Whitelist")
         .setMinValues(1)
         .setMaxValues(1)
     );
